@@ -14,4 +14,6 @@ public class StageCountDTO {
     private Double conversionRate; // %
     private Double dropOffRate;    // %
     private Boolean bottleneck;
+    private Long moved;     // candidates moved to next stage
+    private Long rejected;  // candidates rejected at this stage
 }

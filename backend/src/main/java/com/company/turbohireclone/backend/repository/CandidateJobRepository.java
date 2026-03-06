@@ -54,4 +54,6 @@ WHERE c.status != 'REJECTED'
 GROUP BY c.currentStage
 """)
     List<Object[]> countByCurrentStage();
+
+
 }

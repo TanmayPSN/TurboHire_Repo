@@ -28,22 +28,38 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
     // =====================================================
 
     @Override
-    public AdminDashboardResponse getFullDashboard() {
+    public AdminDashboardResponse getFullDashboard(Long jobId) {
+
+        List<CandidateJob> candidates;
+
+        // 🔥 JOB FILTER SUPPORT
+        if (jobId == null) {
+            candidates = candidateJobRepository.findAll();
+        } else {
+            candidates = candidateJobRepository.findByJob_Id(jobId);
+        }
 
         long totalActiveJobs =
                 jobRepository.countByStatusNot("DELETED");
 
+        // 🔥 USE FILTERED CANDIDATES
         long totalPipeline =
-                candidateJobRepository.countByStatus("IN_PROGRESS");
+                candidates.stream()
+                        .filter(c -> "IN_PROGRESS".equals(c.getStatus()))
+                        .count();
 
         long totalHired =
-                candidateJobRepository.countByStatus("HIRED");
+                candidates.stream()
+                        .filter(c -> "HIRED".equals(c.getStatus()))
+                        .count();
 
         long totalRejected =
-                candidateJobRepository.countByStatus("REJECTED");
+                candidates.stream()
+                        .filter(c -> "REJECTED".equals(c.getStatus()))
+                        .count();
 
         long totalShortlisted =
-                candidateJobRepository.findAll().stream()
+                candidates.stream()
                         .filter(c -> !"REJECTED".equals(c.getStatus()))
                         .count();
 
@@ -68,7 +84,10 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
                 .totalPipeline(totalPipeline)
                 .totalHired(totalHired)
                 .totalRejected(totalRejected)
-                .funnel(getHiringFunnel())
+
+                // 🔥 PASS FILTERED CANDIDATES TO FUNNEL
+                .funnel(getHiringFunnel(candidates))
+
                 .interviewMetrics(getInterviewMetrics())
                 .timeAnalytics(getTimeAnalytics())
                 .r1Pending(getR1Pending())
@@ -77,22 +96,17 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
                 .interviewsPerHire(interviewsPerHire)
                 .build();
     }
+
     // =====================================================
     // HIRING FUNNEL (CUMULATIVE + ANALYTICS)
     // =====================================================
 
-    @Override
-    public HiringFunnelDTO getHiringFunnel() {
-
-        List<CandidateJob> candidates =
-                candidateJobRepository.findAll();
+    // 🔥 CHANGED METHOD SIGNATURE
+    public HiringFunnelDTO getHiringFunnel(List<CandidateJob> candidates) {
 
         List<JobRound> allRounds =
                 jobRoundRepository.findAll();
 
-        // -------------------------------------------------
-        // 1️⃣ Build stage order map (roundName → roundOrder)
-        // -------------------------------------------------
         Map<String, Integer> roundOrderMap = new HashMap<>();
 
         for (JobRound round : allRounds) {
@@ -102,7 +116,6 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
             );
         }
 
-        // Sort rounds by order
         List<Map.Entry<String, Integer>> sortedRounds =
                 new ArrayList<>(roundOrderMap.entrySet());
 
@@ -111,8 +124,9 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
         List<StageCountDTO> stages = new ArrayList<>();
 
         // -------------------------------------------------
-        // 2️⃣ SHORTLISTED (everyone except rejected)
+        // SHORTLISTED
         // -------------------------------------------------
+
         long shortlisted =
                 candidates.stream()
                         .filter(c -> !"REJECTED".equals(c.getStatus()))
@@ -124,8 +138,9 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
                 .build());
 
         // -------------------------------------------------
-        // 3️⃣ CUMULATIVE COUNT FOR EACH ROUND
+        // ROUND STAGES
         // -------------------------------------------------
+
         for (Map.Entry<String, Integer> entry : sortedRounds) {
 
             String roundName = entry.getKey();
@@ -136,7 +151,6 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
                             .filter(c -> !"REJECTED".equals(c.getStatus()))
                             .filter(c -> {
 
-                                // HIRED always included
                                 if ("HIRED".equals(c.getStatus()))
                                     return true;
 
@@ -162,8 +176,9 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
         }
 
         // -------------------------------------------------
-        // 4️⃣ HIRED
+        // HIRED
         // -------------------------------------------------
+
         long hired =
                 candidates.stream()
                         .filter(c -> "HIRED".equals(c.getStatus()))
@@ -174,15 +189,13 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
                 .count(hired)
                 .build());
 
-        // -------------------------------------------------
-        // 5️⃣ Add conversion & drop-off analytics
-        // -------------------------------------------------
         enrichFunnelAnalytics(stages);
 
         return HiringFunnelDTO.builder()
                 .stages(stages)
                 .build();
     }
+
     // =====================================================
     // INTERVIEW METRICS
     // =====================================================
@@ -257,7 +270,7 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
     }
 
     // =====================================================
-    // FUNNEL ANALYTICS LOGIC
+    // FUNNEL ANALYTICS
     // =====================================================
 
     private void enrichFunnelAnalytics(List<StageCountDTO> stages) {
@@ -267,10 +280,19 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
             StageCountDTO previous = stages.get(i - 1);
             StageCountDTO current = stages.get(i);
 
-            long prevCount = previous.getCount();
-            long currCount = current.getCount();
+            long moved =
+                    previous.getMoved() != null
+                            ? previous.getMoved()
+                            : 0;
 
-            if (prevCount == 0) {
+            long rejected =
+                    previous.getRejected() != null
+                            ? previous.getRejected()
+                            : 0;
+
+            long decidedCandidates = moved + rejected;
+
+            if (decidedCandidates == 0) {
                 current.setConversionRate(0.0);
                 current.setDropOffRate(0.0);
                 current.setBottleneck(false);
@@ -278,10 +300,10 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
             }
 
             double conversion =
-                    ((double) currCount / prevCount) * 100;
+                    ((double) moved / decidedCandidates) * 100;
 
             double dropOff =
-                    100 - conversion;
+                    ((double) rejected / decidedCandidates) * 100;
 
             conversion = round(conversion);
             dropOff = round(dropOff);
@@ -289,13 +311,11 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
             current.setConversionRate(conversion);
             current.setDropOffRate(dropOff);
 
-            // 🚨 Bottleneck rule
             current.setBottleneck(
                     dropOff > 50 || conversion < 40
             );
         }
     }
-
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
     }

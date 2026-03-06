@@ -13,7 +13,11 @@ public class AdminAnalyticsController {
     private final AdminAnalyticsService adminAnalyticsService;
 
     @GetMapping("/dashboard")
-    public AdminDashboardResponse getDashboard() {
-        return adminAnalyticsService.getFullDashboard();
+    public AdminDashboardResponse getDashboard(
+            @RequestParam(required = false) Long jobId
+    ) {
+        return adminAnalyticsService.getFullDashboard(jobId);
     }
+
+
 }
