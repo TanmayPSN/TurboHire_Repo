@@ -59,13 +59,19 @@ export default function Availability() {
       toast.error("End time must be after start time");
       return;
     }
-
     const now = new Date();
     const newStart = new Date(`${form.date}T${form.startTime}`);
     const newEnd = new Date(`${form.date}T${form.endTime}`);
-
+    
     if (newStart < now) {
       toast.error("Cannot add slot in the past");
+      return;
+    }
+    
+    const durationMinutes = (newEnd - newStart) / (1000 * 60);
+    
+    if (durationMinutes < 20) {
+      toast.error("Slot must be at least 20 minutes long");
       return;
     }
 
