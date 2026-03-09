@@ -166,6 +166,8 @@ export default function InterviewDetailPage() {
     `${interview.slotDate}T${interview.startTime}`
   );
 
+  const joinAllowedTime = new Date(interviewStart.getTime() - 5 * 60 * 1000);
+
   const endTime = new Date(
     `${interview.slotDate}T${interview.endTime}`
   );
@@ -179,7 +181,8 @@ export default function InterviewDetailPage() {
     new Date() >= interviewStart && !interview.attendanceStatus;
   
   
-
+    const canJoinMeeting =
+  now >= joinAllowedTime && now <= endTime && interview.status === "SCHEDULED";
   
 
   return (
@@ -234,7 +237,7 @@ export default function InterviewDetailPage() {
 
             {/* RIGHT ACTIONS */}
             <div className="flex flex-col gap-3 w-full md:w-[320px] md:items-end">
-              {interview.status === "SCHEDULED" && (
+              { canJoinMeeting &&  (
                 <a
                   href={interview.meetingUrl}
                   target="_blank"

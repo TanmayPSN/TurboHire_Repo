@@ -20,6 +20,7 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+
     private String getMessage(String code) {
         return switch (code) {
             case "INVALID_TOKEN" -> "Invalid candidate portal link.";

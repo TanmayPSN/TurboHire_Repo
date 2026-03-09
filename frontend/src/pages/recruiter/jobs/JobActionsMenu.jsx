@@ -82,11 +82,11 @@ export default function JobActionsMenu({
               </MenuItem>
             )}
    
-            {!isClosed && (
+            {/* {!isClosed && (
               <MenuItem onClick={() => alert("Edit Job coming next")}>
                 Edit Job
               </MenuItem>
-            )}
+            )} */}
    
             {!isClosed && <MenuItem onClick={handleClose}>Close Job</MenuItem>}
    
